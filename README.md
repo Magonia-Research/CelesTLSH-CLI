@@ -1,6 +1,6 @@
 # CelesTLSH-CLI Tool
 
-A command-line tool for calculating, comparing, and analyzing TLSH (Trend Micro Locality Sensitive Hash) values. This tool provides a streamlined interface for working with TLSH hashes, including functionality to check hashes against a known database of malware tools.
+A command-line tool for calculating, comparing, and analyzing TLSH (Trend Micro Locality Sensitive Hash) values. This tool provides a streamlined interface for working with TLSH hashes, including functionality to check hashes against a known database of malware tools. 
 
 ## What is TLSH?
 
