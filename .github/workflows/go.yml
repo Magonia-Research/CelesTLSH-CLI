@@ -1,9 +1,3 @@
-# This workflow will build a golang project for multiple platforms
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
-
-# This workflow will build a golang project for multiple platforms
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
-
 name: Go Multi-Platform Build
 
 on:
@@ -46,8 +40,8 @@ jobs:
         GOARCH: ${{ matrix.arch }}
         CGO_ENABLED: 0  # Disable CGo
       run: |
-        # Identify the main package and build it
-        go build -v -o app${{ matrix.extension }}
+        # Build from the src directory
+        go build -v -o app${{ matrix.extension }} ./src
         
     - name: Upload artifact
       uses: actions/upload-artifact@v4
