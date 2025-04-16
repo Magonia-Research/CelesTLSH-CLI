@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: '0' # Fetches all tags for calculating next version
+          fetch-depth: '0'
 
       - name: Generate New Tag
         id: tag_version
@@ -74,13 +74,14 @@ jobs:
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 0
         run: |
-          go build -v -o CelesTLSH-CLI${{ matrix.extension }} ./src
+          binary_name=CelesTLSH-CLI-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.extension }}
+          go build -v -o $binary_name ./src
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: CelesTLSH-CLI-${{ matrix.os }}-${{ matrix.arch }}
-          path: CelesTLSH-CLI${{ matrix.extension }}
+          path: CelesTLSH-CLI-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.extension }}
 
   release:
     name: Create GitHub Release
@@ -93,12 +94,10 @@ jobs:
         with:
           path: release
 
-      - name: Prepare release assets
+      - name: Prepare Release Assets
         run: |
           mkdir assets
-          for dir in release/*; do
-            cp "$dir"/* assets/
-          done
+          find release -type f -exec mv {} assets/ \;
 
       - name: Create Release with binaries
         uses: softprops/action-gh-release@v1
