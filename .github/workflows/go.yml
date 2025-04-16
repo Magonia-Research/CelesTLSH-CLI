@@ -46,7 +46,7 @@ jobs:
         go build -v -o app${{ matrix.extension }} ./...
         
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # Updated to v4
       with:
         name: app-${{ matrix.os }}-${{ matrix.arch }}
         path: app${{ matrix.extension }}
