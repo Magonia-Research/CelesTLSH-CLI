@@ -5,8 +5,47 @@ on:
     branches: [ "main" ]
 
 jobs:
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.bump.outputs.new_tag }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Required for full git history
+
+    - name: Get latest tag
+      id: get_tag
+      run: |
+        git fetch --tags
+        latest=$(git tag --sort=-v:refname | head -n 1)
+        echo "latest_tag=$latest" >> $GITHUB_OUTPUT
+
+    - name: Bump patch version
+      id: bump
+      run: |
+        old=${{ steps.get_tag.outputs.latest_tag }}
+        if [ -z "$old" ]; then
+          new="v0.1.0"
+        else
+          v="${old#v}"
+          IFS='.' read -r major minor patch <<< "$v"
+          patch=$((patch + 1))
+          new="v$major.$minor.$patch"
+        fi
+        echo "new_tag=$new"
+        echo "new_tag=$new" >> $GITHUB_OUTPUT
+
+    - name: Create Git tag
+      run: |
+        git config user.name "github-actions"
+        git config user.email "github-actions@github.com"
+        git tag ${{ steps.bump.outputs.new_tag }}
+        git push origin ${{ steps.bump.outputs.new_tag }}
+
   build:
     name: Build for ${{ matrix.os }}-${{ matrix.arch }}
+    needs: tag
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -26,43 +65,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Needed to fetch all tags
 
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
         go-version: '1.21'
-
-    - name: Get latest tag
-      id: get_tag
-      run: |
-        git fetch --tags
-        latest=$(git tag --sort=-v:refname | head -n 1)
-        echo "Latest tag: $latest"
-        echo "latest_tag=$latest" >> $GITHUB_OUTPUT
-
-    - name: Bump patch version
-      id: bump
-      run: |
-        old=${{ steps.get_tag.outputs.latest_tag }}
-        if [ -z "$old" ]; then
-          new="v0.1.0"
-        else
-          v="${old#v}"
-          IFS='.' read -r major minor patch <<< "$v"
-          patch=$((patch + 1))
-          new="v$major.$minor.$patch"
-        fi
-        echo "New tag: $new"
-        echo "new_tag=$new" >> $GITHUB_OUTPUT
-
-    - name: Create Git tag
-      run: |
-        git config user.name "github-actions"
-        git config user.email "github-actions@github.com"
-        git tag ${{ steps.bump.outputs.new_tag }}
-        git push origin ${{ steps.bump.outputs.new_tag }}
 
     - name: Build
       env:
@@ -80,7 +87,7 @@ jobs:
 
   release:
     name: Release
-    needs: build
+    needs: [build, tag]
     runs-on: ubuntu-latest
 
     steps:
@@ -95,8 +102,8 @@ jobs:
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ needs.build.outputs.new_tag }}
-        name: Release ${{ needs.build.outputs.new_tag }}
+        tag_name: ${{ needs.tag.outputs.new_tag }}
+        name: Release ${{ needs.tag.outputs.new_tag }}
         generate_release_notes: true
         files: ./artifacts/**/*
       env:
