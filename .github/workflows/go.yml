@@ -47,7 +47,7 @@ jobs:
         CGO_ENABLED: 0  # Disable CGo
       run: |
         # Identify the main package and build it
-        go build -v -o app${{ matrix.extension }}
+        go build -v -o app${{ matrix.extension }} ./src
         
     - name: Upload artifact
       uses: actions/upload-artifact@v4
