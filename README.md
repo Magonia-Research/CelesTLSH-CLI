@@ -12,6 +12,23 @@ TLSH is particularly useful in:
 - Finding similar files in large datasets
 - Identifying obfuscated or slightly modified files
 
+| Score  | FP rate    | Detect rate |
+|--------|------------|-------------|
+| < 300  | 79.30%     | 98.8%       |
+| < 250  | 69.06%     | 98.8%       |
+| < 200  | 50.10%     | 98.8%       |
+| < 150  | 24.33%     | 98.1%       |
+| < 100  | 6.43%      | 94.5%       |
+| < 90   | 4.49%      | 92.3%       |
+| < 80   | 2.93%      | 89.0%       |
+| < 70   | 1.84%      | 83.6%       |
+| < 60   | 1.09%      | 76.0%       |
+| < 50   | 0.52%      | 65.3%       |
+| < 40   | 0.07%      | 49.6%       |
+| < 30   | 0.00181%   | 32.2%       |
+| < 20   | 0.00181%   | 17.3%       |
+| < 10   | 0.00181%   | 6.4%        |
+
 ## Features
 
 - Calculate TLSH hash of any file
