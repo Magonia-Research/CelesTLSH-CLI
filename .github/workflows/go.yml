@@ -1,76 +1,13 @@
-name: Go Multi-Platform Build & Release
+name: Go Build, Auto Tag, and Release
 
 on:
   push:
-    branches: ["main"]
-
-permissions:
-  contents: write
+    branches: [ "main" ]
 
 jobs:
-  autotag:
-    name: Auto Tag Release
-    runs-on: ubuntu-latest
-    outputs:
-      new_tag: ${{ steps.tag_version.outputs.new_tag }}
-      tag_created: ${{ steps.create_tag.outputs.result.tag_created }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: '0'
-          fetch-tags: true
-
-      - name: Generate New Tag
-        id: tag_version
-        run: |
-          latest_tag=$(git tag --sort=-v:refname | head -n 1 || echo "v0.0.0")
-          echo "Latest Tag: $latest_tag"
-
-          IFS='.' read -r major minor patch <<< "${latest_tag#v}"
-          patch=$((patch + 1))
-          new_tag="v$major.$minor.$patch"
-
-          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
-          echo "Generated New Tag: $new_tag"
-
-      - name: Check and Create Tag
-        id: create_tag
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            let tagCreated = false;
-            try {
-              // Check if tag exists
-              await github.rest.git.getRef({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                ref: 'tags/${{ steps.tag_version.outputs.new_tag }}'
-              });
-              console.log('Tag already exists, skipping creation');
-            } catch (error) {
-              if (error.status === 404) {
-                // Tag doesn't exist, create it
-                await github.rest.git.createRef({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  ref: 'refs/tags/${{ steps.tag_version.outputs.new_tag }}',
-                  sha: context.sha
-                });
-                console.log('Created new tag: ${{ steps.tag_version.outputs.new_tag }}');
-                tagCreated = true;
-              } else {
-                // Some other error occurred
-                throw error;
-              }
-            }
-            return { tag_created: tagCreated };
-
   build:
     name: Build for ${{ matrix.os }}-${{ matrix.arch }}
     runs-on: ubuntu-latest
-    needs: autotag
-    if: fromJSON(needs.autotag.outputs.tag_created)
     strategy:
       matrix:
         include:
@@ -88,51 +25,79 @@ jobs:
             extension: ""
 
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Needed to fetch all tags
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.21'
-          cache: true
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
 
-      - name: Build
-        env:
-          GOOS: ${{ matrix.os }}
-          GOARCH: ${{ matrix.arch }}
-          CGO_ENABLED: 0
-        run: |
-          binary_name=CelesTLSH-CLI-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.extension }}
-          go build -v -ldflags="-s -w" -o $binary_name ./src
+    - name: Get latest tag
+      id: get_tag
+      run: |
+        git fetch --tags
+        latest=$(git tag --sort=-v:refname | head -n 1)
+        echo "Latest tag: $latest"
+        echo "latest_tag=$latest" >> $GITHUB_OUTPUT
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: CelesTLSH-CLI-${{ matrix.os }}-${{ matrix.arch }}
-          path: CelesTLSH-CLI-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.extension }}
-          retention-days: 1
+    - name: Bump patch version
+      id: bump
+      run: |
+        old=${{ steps.get_tag.outputs.latest_tag }}
+        if [ -z "$old" ]; then
+          new="v0.1.0"
+        else
+          v="${old#v}"
+          IFS='.' read -r major minor patch <<< "$v"
+          patch=$((patch + 1))
+          new="v$major.$minor.$patch"
+        fi
+        echo "New tag: $new"
+        echo "new_tag=$new" >> $GITHUB_OUTPUT
+
+    - name: Create Git tag
+      run: |
+        git config user.name "github-actions"
+        git config user.email "github-actions@github.com"
+        git tag ${{ steps.bump.outputs.new_tag }}
+        git push origin ${{ steps.bump.outputs.new_tag }}
+
+    - name: Build
+      env:
+        GOOS: ${{ matrix.os }}
+        GOARCH: ${{ matrix.arch }}
+        CGO_ENABLED: 0
+      run: |
+        go build -v -o app-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.extension }} ./...
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-${{ matrix.os }}-${{ matrix.arch }}
+        path: app-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.extension }}
 
   release:
-    name: Create GitHub Release
+    name: Release
+    needs: build
     runs-on: ubuntu-latest
-    needs: [autotag, build]
-    if: fromJSON(needs.autotag.outputs.tag_created)
+
     steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
 
-      - name: Prepare Release Assets
-        run: |
-          mkdir -p assets
-          find release -type f -exec mv {} assets/ \;
+    - name: Display files
+      run: ls -R ./artifacts
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ needs.autotag.outputs.new_tag }}
-          files: assets/*
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ needs.build.outputs.new_tag }}
+        name: Release ${{ needs.build.outputs.new_tag }}
+        generate_release_notes: true
+        files: ./artifacts/**/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
