@@ -15,20 +15,20 @@ import (
 )
 
 const (
-	csvURL = "https://raw.githubusercontent.com/Magonia-Research/detection-content/main/iocs/tlsh/all_attack_tools_hashes.csv"
+	csvURL = "https://raw.githubusercontent.com/Magonia-Research/CelesTLSH-Hashes/HEAD/all_attack_tools_hashes.csv"
 )
 
 // HashRecord represents a row in the TLSH hash database
 type HashRecord struct {
-	RepoName    string
-	FileName    string
-	Version     string
-	TLSHHash    string
-	SHA256Hash  string
-	Imphash     string
-	DateAdded   string
-	Intel       string
-	Distance    int
+	RepoName   string
+	FileName   string
+	Version    string
+	TLSHHash   string
+	SHA256Hash string
+	Imphash    string
+	DateAdded  string
+	Intel      string
+	Distance   int
 }
 
 // Config holds the application configuration
@@ -62,23 +62,23 @@ func parseFlags() Config {
 	// Define CLI flags
 	hashFlag := flag.Bool("hash", false, "Calculate TLSH hash of a file")
 	hashShortFlag := flag.Bool("h", false, "Calculate TLSH hash of a file (shorthand)")
-	
+
 	distanceFlag := flag.Bool("distance", false, "Calculate distance between two TLSH hashes")
 	distanceShortFlag := flag.Bool("d", false, "Calculate distance between two TLSH hashes (shorthand)")
-	
+
 	downloadFlag := flag.Bool("download", false, "Download the CSV database of TLSH hashes")
 	downloadShortFlag := flag.Bool("dl", false, "Download the CSV database of TLSH hashes (shorthand)")
-	
+
 	checkFlag := flag.Bool("check", false, "Check a TLSH hash against the database")
 	checkShortFlag := flag.Bool("c", false, "Check a TLSH hash against the database (shorthand)")
-	
+
 	dbPathFlag := flag.String("db", "tlsh_hashes.csv", "Path to the CSV database file")
 	quietFlag := flag.Bool("quiet", false, "Output only the hash or distance value")
 	csvOutputFlag := flag.Bool("csv", false, "Output results in CSV format (only applies to check mode)")
-	
+
 	// Parse flags
 	flag.Parse()
-	
+
 	// Process remaining arguments
 	args := flag.Args()
 
@@ -148,13 +148,13 @@ func executeHash(config Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to calculate TLSH hash: %v", err)
 	}
-	
+
 	if config.Quiet {
 		fmt.Println(hash)
 	} else {
 		fmt.Printf("TLSH hash of %s: %s\n", config.FilePath, hash)
 	}
-	
+
 	return nil
 }
 
@@ -164,13 +164,13 @@ func executeDistance(config Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to calculate TLSH distance: %v", err)
 	}
-	
+
 	if config.Quiet {
 		fmt.Println(distance)
 	} else {
 		fmt.Printf("Distance between hashes: %d\n", distance)
 	}
-	
+
 	return nil
 }
 
@@ -180,11 +180,11 @@ func executeDownload(config Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to download CSV database: %v", err)
 	}
-	
+
 	if !config.Quiet {
 		fmt.Printf("CSV database downloaded to %s\n", config.DbPath)
 	}
-	
+
 	return nil
 }
 
@@ -194,19 +194,19 @@ func executeCheck(config Config) error {
 	if _, err := os.Stat(config.DbPath); os.IsNotExist(err) {
 		return fmt.Errorf("database file %s does not exist; download it first with --download", config.DbPath)
 	}
-	
+
 	match, err := checkTLSHAgainstDatabase(config.Hash1, config.DbPath)
 	if err != nil {
 		return fmt.Errorf("failed to check TLSH against database: %v", err)
 	}
-	
+
 	if match == nil {
 		if !config.Quiet {
 			fmt.Println("No matches found in the database")
 		}
 		return nil
 	}
-	
+
 	// Output the best match
 	if config.OutputCSV {
 		fmt.Printf("%s,%s,%s,%s,%d\n", match.RepoName, match.FileName, match.Version, match.SHA256Hash, match.Distance)
@@ -219,7 +219,7 @@ func executeCheck(config Config) error {
 		fmt.Printf("  SHA256: %s\n", match.SHA256Hash)
 		fmt.Printf("  Distance: %d\n", match.Distance)
 	}
-	
+
 	return nil
 }
 
@@ -311,13 +311,13 @@ func checkTLSHAgainstDatabase(hashToCheck, dbPath string) (*HashRecord, error) {
 
 	// Parse the CSV
 	reader := csv.NewReader(file)
-	
+
 	// Read and validate header
 	header, err := reader.Read()
 	if err != nil {
 		return nil, fmt.Errorf("error reading CSV header: %v", err)
 	}
-	
+
 	// Validate header structure (optional but recommended)
 	expectedColumns := 8
 	if len(header) < expectedColumns {
@@ -393,7 +393,7 @@ func printUsage(errorMsg string) {
 	if errorMsg != "" {
 		fmt.Fprintf(os.Stderr, "Error: %s\n\n", errorMsg)
 	}
-	
+
 	fmt.Println("TLSH CLI Tool - Calculate and compare TLSH hashes")
 	fmt.Println("\nUsage:")
 	fmt.Println("  Calculate TLSH hash of a file:")
