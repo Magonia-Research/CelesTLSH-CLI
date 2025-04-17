@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       new_tag: ${{ steps.tag_version.outputs.new_tag }}
-      tag_created: ${{ steps.create_tag.outputs.tag_created }}
+      tag_created: ${{ steps.create_tag.outputs.result.tag_created }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -65,14 +65,12 @@ jobs:
               }
             }
             return { tag_created: tagCreated };
-        outputs:
-          tag_created: ${{ steps.create_tag.outputs.result.tag_created }}
 
   build:
     name: Build for ${{ matrix.os }}-${{ matrix.arch }}
     runs-on: ubuntu-latest
     needs: autotag
-    if: needs.autotag.outputs.tag_created == 'true'
+    if: fromJSON(needs.autotag.outputs.tag_created)
     strategy:
       matrix:
         include:
@@ -118,7 +116,7 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [autotag, build]
-    if: needs.autotag.outputs.tag_created == 'true'
+    if: fromJSON(needs.autotag.outputs.tag_created)
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
