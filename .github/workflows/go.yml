@@ -1,15 +1,49 @@
-name: Go Multi-Platform Build
+name: Go Multi-Platform Build & Release
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
+  autotag:
+    name: Auto Tag Release
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.tag_version.outputs.new_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: '0'
+
+      - name: Generate New Tag
+        id: tag_version
+        run: |
+          latest_tag=$(git describe --tags --abbrev=0 || echo "v0.0.0")
+          echo "Latest Tag: $latest_tag"
+
+          IFS='.' read -r major minor patch <<< "${latest_tag#v}"
+          patch=$((patch + 1))
+          new_tag="v$major.$minor.$patch"
+
+          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+          echo "Generated New Tag: $new_tag"
+
+      - name: Push New Tag
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.TOKEN }}
+          script: |
+            github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'refs/tags/${{ steps.tag_version.outputs.new_tag }}',
+              sha: context.sha
+            })
+
   build:
     name: Build for ${{ matrix.os }}-${{ matrix.arch }}
     runs-on: ubuntu-latest
+    needs: autotag
     strategy:
       matrix:
         include:
@@ -27,33 +61,48 @@ jobs:
             extension: ""
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'  # Using a more recent Go version
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
 
-    - name: Build
-      env:
-        GOOS: ${{ matrix.os }}
-        GOARCH: ${{ matrix.arch }}
-        CGO_ENABLED: 0  # Disable CGo
-      run: |
-        go build -v -o app${{ matrix.extension }} ./...
-        
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-${{ matrix.os }}-${{ matrix.arch }}
-        path: app${{ matrix.extension }}
+      - name: Build
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 0
+        run: |
+          binary_name=CelesTLSH-CLI-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.extension }}
+          go build -v -o $binary_name ./src
 
-  test:
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CelesTLSH-CLI-${{ matrix.os }}-${{ matrix.arch }}
+          path: CelesTLSH-CLI-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.extension }}
+
+  release:
+    name: Create GitHub Release
     runs-on: ubuntu-latest
+    needs: [autotag, build]
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+
+      - name: Prepare Release Assets
+        run: |
+          mkdir assets
+          find release -type f -exec mv {} assets/ \;
+
+      - name: Create Release with binaries
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.autotag.outputs.new_tag }}
+          files: assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
