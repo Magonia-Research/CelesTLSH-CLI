@@ -4,21 +4,26 @@ on:
   push:
     branches: ["main"]
 
+permissions:
+  contents: write
+
 jobs:
   autotag:
     name: Auto Tag Release
     runs-on: ubuntu-latest
     outputs:
       new_tag: ${{ steps.tag_version.outputs.new_tag }}
+      tag_created: ${{ steps.create_tag.outputs.tag_created }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: '0'
+          fetch-tags: true
 
       - name: Generate New Tag
         id: tag_version
         run: |
-          latest_tag=$(git describe --tags --abbrev=0 || echo "v0.0.0")
+          latest_tag=$(git tag --sort=-v:refname | head -n 1 || echo "v0.0.0")
           echo "Latest Tag: $latest_tag"
 
           IFS='.' read -r major minor patch <<< "${latest_tag#v}"
@@ -28,22 +33,46 @@ jobs:
           echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
           echo "Generated New Tag: $new_tag"
 
-      - name: Push New Tag
+      - name: Check and Create Tag
+        id: create_tag
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            github.rest.git.createRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: 'refs/tags/${{ steps.tag_version.outputs.new_tag }}',
-              sha: context.sha
-            })
+            let tagCreated = false;
+            try {
+              // Check if tag exists
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: 'tags/${{ steps.tag_version.outputs.new_tag }}'
+              });
+              console.log('Tag already exists, skipping creation');
+            } catch (error) {
+              if (error.status === 404) {
+                // Tag doesn't exist, create it
+                await github.rest.git.createRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: 'refs/tags/${{ steps.tag_version.outputs.new_tag }}',
+                  sha: context.sha
+                });
+                console.log('Created new tag: ${{ steps.tag_version.outputs.new_tag }}');
+                tagCreated = true;
+              } else {
+                // Some other error occurred
+                throw error;
+              }
+            }
+            return { tag_created: tagCreated };
+        outputs:
+          tag_created: ${{ steps.create_tag.outputs.result.tag_created }}
 
   build:
     name: Build for ${{ matrix.os }}-${{ matrix.arch }}
     runs-on: ubuntu-latest
     needs: autotag
+    if: needs.autotag.outputs.tag_created == 'true'
     strategy:
       matrix:
         include:
@@ -67,6 +96,7 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: '1.21'
+          cache: true
 
       - name: Build
         env:
@@ -75,34 +105,36 @@ jobs:
           CGO_ENABLED: 0
         run: |
           binary_name=CelesTLSH-CLI-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.extension }}
-          go build -v -o $binary_name ./src
+          go build -v -ldflags="-s -w" -o $binary_name ./src
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: CelesTLSH-CLI-${{ matrix.os }}-${{ matrix.arch }}
           path: CelesTLSH-CLI-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.extension }}
+          retention-days: 1
 
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [autotag, build]
+    if: needs.autotag.outputs.tag_created == 'true'
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
         with:
           path: release
 
       - name: Prepare Release Assets
         run: |
-          mkdir assets
+          mkdir -p assets
           find release -type f -exec mv {} assets/ \;
 
-      - name: Create Release with binaries
+      - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ needs.autotag.outputs.new_tag }}
           files: assets/*
+          generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
